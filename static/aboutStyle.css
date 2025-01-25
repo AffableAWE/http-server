@@ -1,0 +1,76 @@
+/*
+  Use the following to include this css file
+  <link rel="stylesheet" href="styles1.css" />
+*/
+p {
+  color: blue;
+}/* 1. Basic Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 2. Body Style: Peachy Background + Center Content */
+body {
+  background-color: #FFDAB9;
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 0 20px; /* Add a little side padding if needed */
+}
+
+/* 3. Heading */
+h1 {
+  color: #000000;       /* From <heading><color> */
+  font-size: 42px;      /* From <heading><font-size> */
+  margin-bottom: 15px;  /* From <heading><margin-bottom> */
+  text-align: center;
+}
+
+/* 4. Slide-in Animation (applied to .slide-in class) */
+.slide-in {
+  animation: slide-in 1.5s ease-out forwards;
+}
+
+@keyframes slide-in {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* 5. Subheading */
+h2 {
+  color: #000000;      /* From <subheading><color> */
+  font-size: 20px;     /* From <subheading><font-size> */
+  margin-bottom: 10px; /* From <subheading><margin-bottom> */
+  text-align: center;
+  max-width: 600px;    /* Limit text width for better readability */
+  line-height: 1.4;
+}
+
+/* 6. Link Button */
+.link-button {
+  display: inline-block;
+  background-color: #ADD8E6;   /* <link-button><background> */
+  color: #000000;             /* <link-button><color> */
+  font-size: 18px;            /* <link-button><font-size> */
+  padding: 10px 20px;         /* <link-button><padding> */
+  border-radius: 5px;         /* <link-button><border-radius> */
+  text-decoration: none;      /* Remove default link styling */
+  margin-top: 20px;
+  transition: background-color 0.3s ease;
+  text-align: center;
+}
+
+.link-button:hover {
+  background-color: #87CEFA; /* <link-button><hover-background> */
+}
