@@ -8,8 +8,32 @@
 #include<string.h>
 #include<fstream>
 #include<sstream>
+#include<thread>
+#include<condition_variable>
+#include<mutex>
+#include<queue>
 
 using namespace std;
+
+string STATIC_DIR = "static";
+int PORT = 8080;
+
+void loadConfig() {
+    const char* env_dir = getenv("STATIC_DIR");
+    if (env_dir) STATIC_DIR = env_dir;
+
+    const char* env_port = getenv("PORT");
+    if (env_port) {
+        char* end;
+        long parsed = strtol(env_port, &end, 10);
+        if (*end == '\0' && parsed > 0 && parsed <= 65535) {
+            PORT = static_cast<int>(parsed);
+        }
+        else {
+            cerr << "[WARNING] Invalid PORT '" << env_port << "'. Using 8080." << endl;
+        }
+    } 
+}
 
 /*
  * Removes leading and trailing whitespace (spaces, tabs, newlines) from the given string.
@@ -96,13 +120,8 @@ string getContentType(const string& path) {
     if (dotPosition == string::npos) return "application/octet-stream";
 
     string ext = path.substr(dotPosition + 1);
-    for (const auto& pair : mime_types) {
-        if (pair.first == ext) {
-         return pair.second;
-        }
-    }
-
-    return "application/octet-stream";
+    auto it = mime_types.find(ext);
+    return (it != mime_types.end()) ? it->second : "application/octet-stream";
 }
 
 /*
@@ -113,22 +132,23 @@ string getContentType(const string& path) {
 string routeToFile(const string& path) {
     // Serve the main pages
     if (path == "/") {
-        return "static/index.html";
-    } else if (path == "/about") {
-        return "static/about.html";
-    } else if (path == "/404") {
-        return "static/404.html";
+        return STATIC_DIR + "/index.html";
+    }
+    else if (path == "/about") {
+        return STATIC_DIR + "/about.html";
+    }
+    else if (path == "/404") {
+        return STATIC_DIR + "/404.html";
     }
 
-    // Serve the CSS files for about.html and 404.html
     if (path == "/aboutStyle.css") {
-        return "static/aboutStyle.css";
-    } else if (path == "/404Style.css") {
-        return "static/404Style.css";
+        return STATIC_DIR + "/aboutStyle.css";
+    }
+    else if (path == "/404Style.css") {
+        return STATIC_DIR + "/404Style.css";
     }
 
-    // If none of the above match, return the 404 page
-    return "static/404.html";
+    return STATIC_DIR + "/404.html";
 }
 /*
  * Constructs a full HTTP response from the status, Content-Type, and body.
@@ -233,7 +253,34 @@ void handleRequest(int client_fd) {
     close(client_fd);
 }
 
+queue<int> client_queue;
+mutex queue_mutex;
+condition_variable queue_cond;
+bool server_running = true;
+
+void worker_thread() {
+    while (true) {
+        int client_fd = -1;
+
+        {
+            unique_lock<mutex> lock(queue_mutex);
+            queue_cond.wait(lock, []{
+                return !client_queue.empty() || !server_running;
+            });
+
+            if (client_queue.empty() || !server_running) break;
+
+            client_fd = client_queue.front();
+            client_queue.pop();
+        }
+        handleRequest(client_fd);
+    }
+}
+
 int main() {
+
+    loadConfig();
+
     // Creating an IPv4 Socket
     int sockd4 = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sockd4 < 0) {
@@ -265,7 +312,7 @@ int main() {
     // Binding the sockets
     sockaddr_in server_addr4 = {};
     server_addr4.sin_family = AF_INET;
-    server_addr4.sin_port = htons(8080);
+    server_addr4.sin_port = htons(PORT);
     server_addr4.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(sockd4, (struct sockaddr*)&server_addr4, sizeof(server_addr4)) < 0) {
@@ -275,7 +322,7 @@ int main() {
 
     sockaddr_in6 server_addr6 = {};
     server_addr6.sin6_family = AF_INET6;
-    server_addr6.sin6_port = htons(8080);
+    server_addr6.sin6_port = htons(PORT);
     server_addr6.sin6_addr = in6addr_any;
 
     if (bind(sockd6, (struct sockaddr*)&server_addr6, sizeof(server_addr6)) < 0) {
@@ -297,6 +344,15 @@ int main() {
     }
 
     cout << "[INFO] Server is now listening for incoming connections." << endl;
+ 
+    // Creating a thread pool
+    vector<thread> thread_pool;
+    const unsigned num_thread = thread::hardware_concurrency();
+    for (unsigned i = 0; i < num_thread; ++i) {
+        thread_pool.emplace_back(worker_thread);
+    }
+
+    cout<< "[INFO] Thread Pool Created (" << num_thread << " Workers)" << endl;
 
     // Monitor both sockets
     pollfd fds[2];
@@ -319,7 +375,11 @@ int main() {
                 perror("IPv4 accept failed");
             } else {
                 cout << "IPv4 connection accepted." << endl;
-                handleRequest(client_fd);
+                {
+                    lock_guard<mutex> lock(queue_mutex);
+                    client_queue.push(client_fd);
+                }
+                queue_cond.notify_one();
             }
         }
 
@@ -330,9 +390,20 @@ int main() {
                 perror("IPv6 accept failed");
             } else {
                 cout << "IPv6 connection accepted." << endl;
-                handleRequest(client_fd);
+                {
+                    lock_guard<mutex> lock(queue_mutex);
+                    client_queue.push(client_fd);
+                }
+                queue_cond.notify_one();
             }
         }
+    }
+
+    // Clean Shutdown
+    server_running = false;
+    queue_cond.notify_all();
+    for (auto& t : thread_pool) {
+        t.join();
     }
 
     return 0;
