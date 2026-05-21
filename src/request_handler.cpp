@@ -51,7 +51,8 @@ std::string constructResponse(const std::string& status,
 }
 
 void handleRequest(int client_fd, const std::string& static_dir,
-                   const std::string& client_ip, Logger& logger) {
+                   const std::string& client_ip, Logger& logger,
+                   bool log_enabled) {
     char buffer[BUFFER_SIZE];
     std::string accumulated_data;
     accumulated_data.reserve(BUFFER_SIZE);
@@ -170,7 +171,10 @@ void handleRequest(int client_fd, const std::string& static_dir,
     }
 
 done:
-    logger.logAccess(log_method, log_path, status_code, bytes_sent, client_ip);
+    if (log_enabled) {
+        logger.logAccess(log_method, log_path, status_code, bytes_sent,
+                         client_ip);
+    }
     ::close(client_fd);
 }
 

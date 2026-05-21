@@ -120,7 +120,8 @@ void Server::acceptLoop() {
                           &plen) == 0) {
             client_ip = addrToString(peer);
         }
-        handleRequest(client_fd, cfg_.static_dir, client_ip, logger_);
+        handleRequest(client_fd, cfg_.static_dir, client_ip, logger_,
+                      cfg_.enable_logging);
     });
 
     std::cout << "[INFO] Thread pool started." << std::endl;

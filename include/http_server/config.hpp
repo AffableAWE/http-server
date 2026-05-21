@@ -13,6 +13,7 @@ struct Config {
     std::string static_dir = "static";
     int port = 8080;
     std::string db_path = "data/logs.db";
+    bool enable_logging = true;
 };
 
 /*

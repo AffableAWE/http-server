@@ -16,7 +16,8 @@ class Logger;
  *         logger     - Logger to record the access in.
  */
 void handleRequest(int client_fd, const std::string& static_dir,
-                   const std::string& client_ip, Logger& logger);
+                   const std::string& client_ip, Logger& logger,
+                   bool log_enabled);
 
 /*
  * Builds a full HTTP/1.1 response string with headers and body.

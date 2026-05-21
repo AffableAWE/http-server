@@ -1,0 +1,5 @@
+build/
+data/
+legacy/server
+.env
+.DS_Store

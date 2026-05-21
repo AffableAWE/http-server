@@ -38,7 +38,8 @@ class Logger {
    private:
     std::mutex mtx_;
     std::string db_path_;
-    // void* db_handle_; // will become sqlite3* when SQLite is wired in
+    void* db_handle_ = nullptr;    // sqlite3*
+    void* insert_stmt_ = nullptr;  // sqlite3_stmt*
 };
 
 }  // namespace http_server

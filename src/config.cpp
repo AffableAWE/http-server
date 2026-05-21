@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 namespace http_server {
 
@@ -25,6 +26,14 @@ Config loadConfig() {
 
     const char* env_db = std::getenv("DB_PATH");
     if (env_db) cfg.db_path = env_db;
+
+    const char* env_log = std::getenv("ENABLE_LOGGING");
+    if (env_log) {
+        std::string val(env_log);
+        if (val == "0" || val == "false" || val == "no") {
+            cfg.enable_logging = false;
+        }
+    }
 
     return cfg;
 }
