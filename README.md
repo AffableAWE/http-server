@@ -40,7 +40,7 @@ This project began as a "learn by building" exercise. The original monolithic im
 
 A bird's-eye view of how a request flows from a client through the server's major components.
 
-![High-Level Architecture](docs/images/high-level-architecture.png](https://drive.google.com/file/d/1peRLdVoyGUcniTaCrDBojHOl6nGFXH2U/view?usp=drive_link)
+![High-Level Architecture]
 
 The server exposes itself simultaneously on IPv4 and IPv6. The main thread is responsible only for accepting new connections; all per-request work happens on worker threads, keeping the accept path fast and predictable.
 
