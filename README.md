@@ -5,78 +5,66 @@ A blazingly fast, multi-threaded **HTTP/1.1 server** built entirely from scratch
 | 22,000+ req/sec (Clean) | ~8,000 req/sec (With Logging) | Dual-Stack IPv4 / IPv6 |
 | :---: | :---: | :---: |
 
-### Why I Built This
+### 🛠️ Why I Built This
+
 This project started as a raw "learn-by-building" monolith (preserved in `legacy/`). It has since evolved into a production-grade showcase of **concurrency, modular design, and observability**.
+
 ---
 
-## 📋 Table of Contents
-
-- [Highlights](#-highlights)
-- [High-Level Architecture](#-high-level-architecture)
-- [Technical Architecture](#-technical-architecture)
-- [Project Structure](#-project-structure)
-- [Module Responsibilities](#-module-responsibilities)
-- [Building from Source](#%EF%B8%8F-building-from-source)
-- [Configuration](#%EF%B8%8F-configuration)
-- [Routes](#-routes)
-- [Access Logging](#-access-logging)
-- [Benchmarks](#-benchmarks)
-- [What the Refactor Fixed](#-what-the-refactor-fixed)
-- [Roadmap](#%EF%B8%8F-roadmap)
-- [License](#-license)
+## 🧭 Quick Links
+* [✨ Core Highlights](#-highlights)
+* [🏛️ Architecture & Blueprints](#-architecture)
+* [🛠️ Getting Started (Quick Run)](#️-building-from-source)
+* [⚙️ Configuration & Routes](#-configuration)
 
 ---
 
 ## ✨ Highlights
 
-- **22,000+ requests/sec** under `wrk` benchmark (logging disabled); **~8,000 req/sec** with full SQLite access logging.
-- **Zero external runtime dependencies** beyond `libsqlite3` and the C++ standard library.
-- **Dual-stack networking** — separate IPv4 and IPv6 listening sockets, multiplexed via `poll()`.
-- **Fixed-size thread pool** with a mutex-guarded queue and condition variable, sized to `std::thread::hardware_concurrency()`.
-- **SQLite WAL-mode logging** with prepared statements; one mutex serializes writes across all workers.
-- **Graceful shutdown** via `SIGINT`/`SIGTERM` signal handlers and an atomic running flag.
-- **Toggleable logging** — flip access logging on or off via an environment variable, no recompilation required.
+* **22,000+ requests/sec** under `wrk` benchmark (logging disabled); **~8,000 req/sec** with full SQLite access logging.
+* **Zero external runtime dependencies** beyond `libsqlite3` and the C++ standard library.
+* **Dual-stack networking** — separate IPv4 and IPv6 listening sockets, multiplexed via `poll()`.
+* **Fixed-size thread pool** with a mutex-guarded queue and condition variable, sized to `std::thread::hardware_concurrency()`.
+* **SQLite WAL-mode logging** with prepared statements; one mutex serializes writes across all workers.
+* **Graceful shutdown** via `SIGINT`/`SIGTERM` signal handlers and an atomic running flag.
+* **Toggleable logging** — flip access logging on or off via an environment variable, no recompilation required.
 
 ---
 
-## 🏛 High-Level Architecture
+## 🏛️ Architecture & Blueprints
 
-A bird's-eye view of how a request flows from a client through the server's major components.
+### 1. High-Level Blueprint
+The main thread handles the rapid-fire incoming connections across both IPv4 and IPv6 protocols, completely shielding the worker pool from connection overhead.
 
 ![High-Level Architecture](docs/images/high-level-architecture.png)
 
-The server exposes itself simultaneously on IPv4 and IPv6. The main thread is responsible only for accepting new connections; all per-request work happens on worker threads, keeping the accept path fast and predictable.
-
----
-
-## ⚙️ Technical Architecture
-
-A detailed look at the internal data flow — sockets, the accept loop, the thread pool's queue, the request pipeline, and the logging subsystem.
+### 2. The Internal Pipeline
+A deep-dive look at the file descriptor routing queue and the asynchronous-adjacent side-channel logging network.
 
 ![Technical Architecture](docs/images/technical-architecture.png)
 
-**Key design choices:**
-
-- The main thread runs a `poll()` loop with a 500 ms timeout — long enough to be efficient under load, short enough to notice a shutdown signal promptly.
-- The worker pool size defaults to `hardware_concurrency()` but falls back to a minimum of two threads if the runtime reports zero.
-- The fd queue is the only point of contention on the hot path. Workers spend the vast majority of their time in `recv()`, `read()`, and `send()`, not waiting on the queue lock.
-- Logging is serialized through a single mutex inside `Logger`. SQLite in WAL mode handles this efficiently — readers can run concurrently with the writer.
-
----
-
-## 📁 Project Structure
-
-The repository is organized to separate **public headers** (`include/`), **implementations** (`src/`), **runtime data** (`data/`), and the **original implementation** (`legacy/`).
+### 3. Clean Project Layout
+Designed to map cleanly to modern CMake standards with a strict separation of concerns.
 
 ![Project Structure](docs/images/project-structure.png)
 
-This layout maps cleanly to CMake's expectations: a single `file(GLOB ...)` over `src/*.cpp` picks up every translation unit, and `target_include_directories(... include)` makes all module headers resolvable as `#include "http_server/<module>.hpp"`.
-
 ---
 
-## 🧩 Module Responsibilities
+## 🧩 Deep-Dive Engineering Details
 
-Each module has a header in `include/http_server/` and an implementation in `src/`.
+<details>
+<summary><b>⚙️ Click to view core design choices & optimizations</b></summary>
+
+* **The main thread** runs a `poll()` loop with a 500 ms timeout — long enough to be efficient under load, short enough to notice a shutdown signal promptly.
+* **The worker pool size** defaults to `hardware_concurrency()` but falls back to a minimum of two threads if the runtime reports zero.
+* **The fd queue** is the only point of contention on the hot path. Workers spend the vast majority of their time in `recv()`, `read()`, and `send()`, not waiting on the queue lock.
+* **Logging** is serialized through a single mutex inside `Logger`. SQLite in WAL mode handles this efficiently — readers can run concurrently with the writer.
+* **CMake layout** maps cleanly to expectations: a single `file(GLOB ...)` over `src/*.cpp` picks up every translation unit, and `target_include_directories(... include)` makes all module headers resolvable as `#include "http_server/<module>.hpp"`.
+
+</details>
+
+<details>
+<summary><b>📦 Click to view Module Responsibilities</b></summary>
 
 | Module | Responsibility |
 |---|---|
@@ -89,34 +77,22 @@ Each module has a header in `include/http_server/` and an implementation in `src
 | **`server`** | Owns the listening sockets, dual-stack setup, the `poll()` accept loop, and the full lifecycle. |
 | **`utils`** | Small standalone helpers: `trim()`, `getContentType()`. |
 
+</details>
+
 ---
 
-## 🛠️ Building from Source
+## 🛠️ Spin It Up in 60 Seconds
 
-### Prerequisites
-
-- A C++17 compiler — Apple Clang, GCC ≥ 9, or Clang ≥ 9
-- CMake ≥ 3.16
-- `libsqlite3` (runtime library **and** development headers)
-- `pkg-config`
-
-### macOS (Homebrew)
-
+### 1. Install Dependencies
 ```bash
+# macOS
 brew install cmake sqlite pkg-config
-export PKG_CONFIG_PATH="$(brew --prefix sqlite)/lib/pkgconfig:$PKG_CONFIG_PATH"
-```
 
-Homebrew installs SQLite as keg-only, so the `PKG_CONFIG_PATH` export is required for CMake to find it. Add the line to your `~/.zshrc` to make it permanent.
-
-### Debian / Ubuntu
-
-```bash
-sudo apt update
+# Ubuntu / Debian
 sudo apt install build-essential cmake libsqlite3-dev pkg-config
 ```
 
-### Compile
+### 2. Compile
 
 ```bash
 cmake -S . -B build
@@ -125,7 +101,7 @@ cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
 The binary lands at `build/bin/http_server`.
 
-### Run
+### 3. Run
 
 ```bash
 mkdir -p data
