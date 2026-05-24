@@ -83,7 +83,8 @@ Designed to map cleanly to modern CMake standards with a strict separation of co
 
 ## 🛠️ Spin It Up in 60 Seconds
 
-### 1. Install Dependencies
+### 1. Install dependencies
+
 ```bash
 # macOS
 brew install cmake sqlite pkg-config
@@ -92,14 +93,12 @@ brew install cmake sqlite pkg-config
 sudo apt install build-essential cmake libsqlite3-dev pkg-config
 ```
 
-### 2. Compile
+### 2. Build
 
 ```bash
 cmake -S . -B build
-cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+cmake --build build -j
 ```
-
-The binary lands at `build/bin/http_server`.
 
 ### 3. Run
 
@@ -108,37 +107,32 @@ mkdir -p data
 ./build/bin/http_server
 ```
 
-You should see:
-
-```
-[INFO] Logger initialized (db=data/logs.db)
-[INFO] Starting http-server on port 8080, static dir 'static'.
-[INFO] IPv4 and IPv6 sockets created.
-[INFO] Bound to port 8080.
-[INFO] Listening for incoming connections.
-[INFO] Thread pool started.
-```
-
-Then open `http://localhost:8080/` in a browser, or `curl` it:
+Open the server:
 
 ```bash
 curl -i http://localhost:8080/
+```
+
+Or visit:
+
+```text
+http://localhost:8080/
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-All configuration is read from environment variables at startup. Defaults apply when a variable is unset or invalid.
+Runtime settings are provided through environment variables.
 
-| Variable | Default | Description |
-|---|---|---|
-| **`PORT`** | `8080` | TCP port to listen on. Must be in the range `1`–`65535`; invalid values trigger a warning and fall back to the default. |
-| **`STATIC_DIR`** | `static` | Directory served as the static file root. |
-| **`DB_PATH`** | `data/logs.db` | Path to the SQLite access-log database. |
-| **`ENABLE_LOGGING`** | `true` | Set to `false`, `0`, or `no` to disable access logging entirely. |
+| Variable | Default | Purpose |
+|---|---:|---|
+| `PORT` | `8080` | Server port |
+| `STATIC_DIR` | `static` | Static file directory |
+| `DB_PATH` | `data/logs.db` | SQLite log database |
+| `ENABLE_LOGGING` | `true` | Enable request logging |
 
-### Example: run on port 9000 without logging
+Example:
 
 ```bash
 PORT=9000 ENABLE_LOGGING=false ./build/bin/http_server
@@ -148,151 +142,37 @@ PORT=9000 ENABLE_LOGGING=false ./build/bin/http_server
 
 ## 🛣 Routes
 
-The server uses an explicit whitelist for routing. There is no filesystem traversal of the static directory.
+| Path | Response |
+|---|---|
+| `/` | Home page |
+| `/about` | About page |
+| Unknown path | Custom 404 page |
 
-| Path | Served file | Status |
-|---|---|---|
-| `/` | `static/index.html` | `200` |
-| `/about` | `static/about.html` | `200` |
-| `/404` | `static/404.html` | `200` |
-| `/aboutStyle.css` | `static/aboutStyle.css` | `200` |
-| `/404Style.css` | `static/404Style.css` | `200` |
-| *any other path* | `static/404.html` (fallback) | `200` |
-
-**Method handling:**
-
-- Only `GET` is accepted. All other methods return `405 Method Not Allowed`.
-- Malformed requests return `400 Bad Request`.
-- Requests with headers exceeding 64 KB return `413 Payload Too Large`.
+Only `GET` requests are supported.
 
 ---
 
-## 📊 Access Logging
+## 📊 Performance
 
-When `ENABLE_LOGGING` is `true` (the default), every served connection appends one row to a SQLite database.
+Benchmarked locally with `wrk`.
 
-### Schema
+| Mode | Throughput |
+|---|---:|
+| Logging disabled | ~23,000 req/sec |
+| SQLite logging enabled | ~8,000 req/sec |
 
-```sql
-CREATE TABLE access_logs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp   TEXT    NOT NULL DEFAULT (datetime('now')),
-    client_ip   TEXT    NOT NULL,
-    method      TEXT    NOT NULL,
-    path        TEXT    NOT NULL,
-    status_code INTEGER NOT NULL,
-    bytes_sent  INTEGER NOT NULL
-);
-
-CREATE INDEX idx_access_logs_timestamp ON access_logs(timestamp);
-CREATE INDEX idx_access_logs_status    ON access_logs(status_code);
-```
-
-The schema lives in [`scripts/init_db.sql`](scripts/init_db.sql) and is applied idempotently on every server start (`CREATE TABLE IF NOT EXISTS`).
-
-### Database settings
-
-`Logger` opens the database with two performance-oriented pragmas:
-
-```sql
-PRAGMA journal_mode=WAL;       -- concurrent readers + one writer
-PRAGMA synchronous=NORMAL;     -- durable enough for access logs
-```
-
-### Useful queries
-
-```bash
-# Total requests served
-sqlite3 data/logs.db "SELECT COUNT(*) FROM access_logs;"
-
-# Breakdown by status code
-sqlite3 data/logs.db \
-    "SELECT status_code, COUNT(*) FROM access_logs GROUP BY status_code;"
-
-# Top requested paths
-sqlite3 data/logs.db \
-    "SELECT path, COUNT(*) AS hits FROM access_logs
-     GROUP BY path ORDER BY hits DESC LIMIT 10;"
-
-# Most recent 20 requests
-sqlite3 data/logs.db \
-    "SELECT timestamp, client_ip, method, path, status_code
-     FROM access_logs ORDER BY id DESC LIMIT 20;"
-```
-
-### Thread safety
-
-All writes go through a single `std::mutex` inside `Logger`. A prepared `INSERT` statement is created once and reused across all calls — only the bound parameters change per request. This is the only thread-safety boundary required for the access log.
-
----
-
-## 📈 Benchmarks
-
-Measured locally on Apple Silicon with `wrk -t4 -c100 -d10s http://localhost:8080/`.
-
-| Build | Configuration | Requests/sec | Notes |
-|---|---|---|---|
-| **v1** (legacy monolith) | no logging, original bugs intact | ~20,000 | the starting point |
-| **v2** (refactored) | `ENABLE_LOGGING=false` | **~23,000** | refactor did not regress throughput |
-| **v2** (refactored) | logging enabled (SQLite INSERT per request) | ~8,000 | observability trade-off |
-
-The gap between the two v2 numbers is the cost of one mutex-guarded `sqlite3_step()` per request — a deliberate trade-off in favor of structured, queryable access logs. The toggle exists so you can pick the right mode for your use case at launch time.
-
-### Reproduce the benchmark
-
-```bash
-# Logging ON (default)
-./build/bin/http_server &
-wrk -t4 -c100 -d10s http://localhost:8080/
-
-# Logging OFF
-ENABLE_LOGGING=false ./build/bin/http_server &
-wrk -t4 -c100 -d10s http://localhost:8080/
-```
-
----
-
-## 🔧 What the Refactor Fixed
-
-Items identified during code review of the original monolithic implementation, all addressed in v2:
-
-### Correctness
-
-- **`file.eof()` read loop** replaced with the canonical `while (file.read(buf, n) || file.gcount() > 0)` pattern. The original could send one extra zero-length chunk at end-of-file.
-- **Unchecked `send()` return values** replaced with a `sendAll()` helper that loops on partial writes, retries on `EINTR`, and detects connection drops. The original could silently truncate large responses.
-- **Dead `parseHTTPHeaders()` function** now wired into the request pipeline as `parseRequest()`, returning a structured `ParsedRequest`.
-
-### Robustness
-
-- **Unreachable shutdown block** made reachable via an atomic running flag, a 500 ms `poll()` timeout in the accept loop, and a `SIGINT`/`SIGTERM` handler in `main()`.
-- **`IPV6_V6ONLY`** now set explicitly on the IPv6 socket so the IPv4 bind does not collide on Linux dual-stack systems.
-- **64 KB request size cap** added to prevent unbounded buffering from slow or malicious clients.
-- **`EINTR` retry** added to `recv()`, `send()`, `accept()`, and `poll()` so signal interrupts no longer kill connections.
-
-### Observability
-
-- **Hardcoded `"port 8080"`** log lines now reflect the actual configured port.
-- **SQLite-backed access log** records every request (or failed connection attempt) with timestamp, client IP, method, path, status code, and bytes sent.
-
-### Maintainability
-
-- **One 400-line file** split into 9 focused modules with clear responsibilities and public/private boundaries.
-- **Globals eliminated** — the thread pool's queue, mutex, and condition variable are now members of a `ThreadPool` class; the server's sockets and lifecycle state are members of a `Server` class.
-- **`using namespace std;`** removed from all headers, preventing namespace pollution downstream.
+Logging can be disabled when raw throughput is preferred.
 
 ---
 
 ## 🗺️ Roadmap
 
-- **Dockerization** with multi-stage builds and volume mounts for `static/` and `data/`.
-- **HTTP keep-alive** support to amortize TCP handshake cost across multiple requests.
-- **`sendfile()`** zero-copy path for large static files.
-- **Per-connection `recv()` timeout** to prevent slowloris-style holds on worker threads.
-- **Batched log inserts** — single transaction per N requests — to reduce the logging-on throughput penalty.
-- **Path traversal protection** when routing is generalized beyond the current whitelist.
+- Docker support
+- HTTP keep-alive
+- Zero-copy static file serving with `sendfile()`
+- Batched SQLite log inserts
+- Safer generalized routing
 
 ---
-
-## 📄 License
 
 See [`LICENSE`](./LICENSE).
