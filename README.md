@@ -174,5 +174,3 @@ Logging can be disabled when raw throughput is preferred.
 - Safer generalized routing
 
 ---
-
-See [`LICENSE`](./LICENSE).
