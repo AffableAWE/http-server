@@ -31,7 +31,7 @@ This project started as a raw "learn-by-building" monolith (preserved in `legacy
 
 ---
 
-## 🏛️ Architecture & Blueprints
+## Architecture & Blueprints
 
 ### 1. High-Level Blueprint
 The main thread handles the rapid-fire incoming connections across both IPv4 and IPv6 protocols, completely shielding the worker pool from connection overhead.
@@ -50,7 +50,7 @@ Designed to map cleanly to modern CMake standards with a strict separation of co
 
 ---
 
-## 🧩 Deep-Dive Engineering Details
+## Deep-Dive Engineering Details
 
 <details>
 <summary><b>⚙️ Click to view core design choices & optimizations</b></summary>
