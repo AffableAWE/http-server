@@ -152,7 +152,7 @@ Only `GET` requests are supported.
 
 ---
 
-## 📊 Performance
+## Performance
 
 Benchmarked locally with `wrk`.
 
@@ -165,7 +165,7 @@ Logging can be disabled when raw throughput is preferred.
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 - Docker support
 - HTTP keep-alive
