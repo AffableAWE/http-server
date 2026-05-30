@@ -1,4 +1,4 @@
-# ⚡ http-server
+# http-server
 
 A blazingly fast, multi-threaded **HTTP/1.1 server** built entirely from scratch in modern **C++17**. No bulky frameworks—just raw performance, clean architecture, and embedded SQLite logging.
 
@@ -11,7 +11,7 @@ This project started as a raw "learn-by-building" monolith (preserved in `legacy
 
 ---
 
-## 🧭 Quick Links
+## Quick Links
 * [✨ Core Highlights](#-highlights)
 * [🏛️ Architecture & Blueprints](#-architecture)
 * [🛠️ Getting Started (Quick Run)](#️-building-from-source)
@@ -19,7 +19,7 @@ This project started as a raw "learn-by-building" monolith (preserved in `legacy
 
 ---
 
-## ✨ Highlights
+## Highlights
 
 * **22,000+ requests/sec** under `wrk` benchmark (logging disabled); **~8,000 req/sec** with full SQLite access logging.
 * **Zero external runtime dependencies** beyond `libsqlite3` and the C++ standard library.
