@@ -81,7 +81,7 @@ Designed to map cleanly to modern CMake standards with a strict separation of co
 
 ---
 
-## 🛠️ Spin It Up in 60 Seconds
+## Spin It Up in 60 Seconds
 
 ### 1. Install dependencies
 
@@ -121,7 +121,7 @@ http://localhost:8080/
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 Runtime settings are provided through environment variables.
 
