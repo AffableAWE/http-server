@@ -140,7 +140,7 @@ PORT=9000 ENABLE_LOGGING=false ./build/bin/http_server
 
 ---
 
-## 🛣 Routes
+## Routes
 
 | Path | Response |
 |---|---|
