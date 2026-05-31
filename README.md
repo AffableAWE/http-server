@@ -53,7 +53,7 @@ Designed to map cleanly to modern CMake standards with a strict separation of co
 ## Deep-Dive Engineering Details
 
 <details>
-<summary><b>⚙️ Click to view core design choices & optimizations</b></summary>
+<summary><b> Click to view core design choices & optimizations</b></summary>
 
 * **The main thread** runs a `poll()` loop with a 500 ms timeout — long enough to be efficient under load, short enough to notice a shutdown signal promptly.
 * **The worker pool size** defaults to `hardware_concurrency()` but falls back to a minimum of two threads if the runtime reports zero.
