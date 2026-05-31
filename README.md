@@ -5,7 +5,7 @@ A blazingly fast, multi-threaded **HTTP/1.1 server** built entirely from scratch
 | 22,000+ req/sec (Clean) | ~8,000 req/sec (With Logging) | Dual-Stack IPv4 / IPv6 |
 | :---: | :---: | :---: |
 
-### 🛠️ Why I Built This
+### Why I Built This
 
 This project started as a raw "learn-by-building" monolith (preserved in `legacy/`). It has since evolved into a production-grade showcase of **concurrency, modular design, and observability**.
 
