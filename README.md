@@ -64,7 +64,7 @@ Designed to map cleanly to modern CMake standards with a strict separation of co
 </details>
 
 <details>
-<summary><b>📦 Click to view Module Responsibilities</b></summary>
+<summary><b> Click to view Module Responsibilities</b></summary>
 
 | Module | Responsibility |
 |---|---|
