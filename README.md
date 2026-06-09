@@ -1,6 +1,6 @@
 # http-server
 
-A blazingly fast, multi-threaded **HTTP/1.1 server** built entirely from scratch in modern **C++17**. No bulky frameworks—just raw performance, clean architecture, and embedded SQLite logging.
+A blazingly fast, multi-threaded **HTTP/1.1 server** built entirely from scratch in modern **C++17**. No bulky frameworks—just raw performance, clean architecture, and embedded SQLite logging
 
 | 22,000+ req/sec (Clean) | ~8,000 req/sec (With Logging) | Dual-Stack IPv4 / IPv6 |
 | :---: | :---: | :---: |
