@@ -50,7 +50,7 @@ Designed to map cleanly to modern CMake standards with a strict separation of co
 
 ---
 
-## Deep-Dive Engineering Details.
+## Deep-Dive Engineering Details
 
 <details>
 <summary><b> Click to view core design choices & optimizations</b></summary>
