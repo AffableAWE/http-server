@@ -7,7 +7,7 @@ A blazingly fast, multi-threaded **HTTP/1.1 server** built entirely from scratch
 
 ### Why I Built This
 
-This project started as a raw "learn-by-building" monolith (preserved in `legacy/`). It has since evolved into a production-grade showcase of **concurrency, modular design, and observability**
+This project started as a raw "learn-by-building" monolith (preserved in `legacy/`). It has since evolved into a production-grade showcase of **concurrency, modular design, and observability**.
 
 ---
 
