@@ -161,7 +161,7 @@ Benchmarked locally with `wrk`.
 | Logging disabled | ~23,000 req/sec |
 | SQLite logging enabled | ~8,000 req/sec |
 
-Logging can be disabled when raw throughput is preferred.
+Logging can be disabled when raw throughput is preferred..
 
 ---
 
