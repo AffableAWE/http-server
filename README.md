@@ -123,7 +123,7 @@ http://localhost:8080/
 
 ## Configuration
 
-Runtime settings are provided through environment variables.
+Runtime settings are provided through environment variables..
 
 | Variable | Default | Purpose |
 |---|---:|---|
