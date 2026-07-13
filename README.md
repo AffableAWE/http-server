@@ -1,4 +1,4 @@
-# http-server
+# http-server.
 
 A blazingly fast, multi-threaded **HTTP/1.1 server** built entirely from scratch in modern **C++17**. No bulky frameworks—just raw performance, clean architecture, and embedded SQLite logging.
 
