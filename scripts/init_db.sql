@@ -1,5 +1,5 @@
 -- Schema for the http-server access log database.
--- Run once at server startup; CREATE TABLE IF NOT EXISTS makes it idempotent.
+-- Run once at server startup; CREATE TABLE IF NOT EXISTS makes it idempotent...
 
 CREATE TABLE IF NOT EXISTS access_logs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
