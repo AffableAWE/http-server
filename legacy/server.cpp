@@ -60,7 +60,7 @@ string trim(const string &input) {
 /*
  * Parses HTTP headers from the accumulated request data.
  * Extracts the headers section ("\r\n\r\n") and splits each line
- * 
+ * into key-value pairs for a key-value map.
  * Input:- accumulated_data - A string containing HTTP request data
  * Returns: An unordered_map<string, string> with header key-value pairs
  */
