@@ -27,7 +27,7 @@ This project started as a raw "learn-by-building" monolith (preserved in `legacy
 * **Fixed-size thread pool** with a mutex-guarded queue and condition variable, sized to `std::thread::hardware_concurrency()`.
 * **SQLite WAL-mode logging** with prepared statements; one mutex serializes writes across all workers.
 * **Graceful shutdown** via `SIGINT`/`SIGTERM` signal handlers and an atomic running flag.
-* **Toggleable logging** — flip access logging on or off via an environment variable, no recompilation required...
+* **Toggleable logging** — flip access logging on or off via an environment variable, no recompilation required.
 
 ---
 
