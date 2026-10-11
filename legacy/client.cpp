@@ -1,2 +1,1 @@
-// Doing some testing as of now, kindly wait for awhile 
-// Thinking about adding async behaviour to reach better RPS ...
+// Doing some testing as of now, kindly wait for awhile.
