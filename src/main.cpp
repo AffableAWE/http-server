@@ -10,7 +10,7 @@ http_server::Server* g_server = nullptr;
 void signalHandler(int /*signum*/) {
     if (g_server) g_server->stop();
 }
-}  // namespace
+}  
 
 int main() {
     http_server::Config cfg = http_server::loadConfig();
