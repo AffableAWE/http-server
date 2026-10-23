@@ -17,9 +17,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 # -------- Sources --------
-# IMPORTANT: only glob src/, never the repo root.
-# The old monolithic server.cpp lives at the root for sentimental reasons
-# and must not be compiled (it would cause duplicate-symbol link errors).
 file(GLOB SERVER_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
 
 add_executable(http_server ${SERVER_SOURCES})
@@ -29,7 +26,6 @@ target_include_directories(http_server PRIVATE
 )
 
 # -------- SQLite --------
-# Find the system-installed SQLite3 (libsqlite3-dev on Debian/Ubuntu).
 find_package(SQLite3 REQUIRED)
 target_link_libraries(http_server PRIVATE SQLite3::SQLite3)
 # -------- Threads --------
