@@ -3,3 +3,4 @@ data/
 legacy/server
 .env
 .DS_Store
+__pycache__/
