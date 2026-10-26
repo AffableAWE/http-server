@@ -1,0 +1,198 @@
+{
+  "metadata": {
+    "label": "cv",
+    "timestamp_utc": "2026-10-26T15:17:36.047703+00:00",
+    "environment": {
+      "timestamp_utc": "2026-10-26T15:17:36.048030+00:00",
+      "hostname": "Priyanshs-MacBook-Pro.local",
+      "platform": "Darwin",
+      "platform_release": "27.0.0",
+      "platform_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:05:27 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8103",
+      "machine": "arm64",
+      "cpu_model": "Apple M1",
+      "logical_cpus": 8,
+      "python": "3.14.5",
+      "ab_version": "This is ApacheBench, Version 2.3 <$Revision: 1923142 $>"
+    },
+    "build": {
+      "binary": "/Users/priyanshshukla/Documents/deepseek-harness/default-workspace/http-server/build/bin/http_server",
+      "binary_sha256": "c4133945c73ce7139d3b8c8ceb77e23310b4818e30eb4e103bcc7cfa9c6307ee",
+      "build_type": "Release",
+      "compiler": "/usr/bin/c++",
+      "cxx_flags": "-O3 -DNDEBUG -std=c++17 -arch arm64 -Wall -Wextra -Wpedantic",
+      "git_commit": "d642591ee7d868bfa616948a13fc753f443fc15e",
+      "git_dirty": true
+    },
+    "workload": {
+      "tool": "wrk",
+      "client_location": "same host, loopback 127.0.0.1",
+      "http_version": "HTTP/1.1",
+      "payload": "/",
+      "expected_body_sha256": "a7e49dce50c9f51a04f8bd749ffd13cfb8df3b876059aaa5b99017a927bc4001",
+      "connections": 100,
+      "threads": 1,
+      "duration_seconds": 60,
+      "warmup_seconds": 5,
+      "runs": 1
+    }
+  },
+  "scenarios": [
+    {
+      "mode": "keepalive-logging-on",
+      "keepalive": true,
+      "logging_enabled": true,
+      "runs": [
+        {
+          "command": [
+            "wrk",
+            "-t",
+            "1",
+            "-c",
+            "100",
+            "-d",
+            "60s",
+            "--latency",
+            "http://127.0.0.1:51389/"
+          ],
+          "exit_code": 0,
+          "wall_seconds": 60.129,
+          "client_cpu_seconds": 59.646,
+          "client_cpu_percent": 99.2,
+          "client_max_rss_kb": 3632,
+          "requests": 10092765,
+          "test_seconds": 60.0,
+          "requests_per_second": 167930.92,
+          "latency_percentiles_ms": {
+            "50": 0.39,
+            "75": 0.455,
+            "90": 0.504,
+            "99": 0.81
+          },
+          "socket_errors": {
+            "connect": 0,
+            "read": 0,
+            "write": 0,
+            "timeout": 0
+          },
+          "socket_error_total": 0,
+          "non_2xx_responses": 0,
+          "successful_requests": 10092765,
+          "successful_rps": 167930.92,
+          "raw_output_path": "data/benchmarks/v2-baseline/20261026T204736Z-86435/keepalive-logging-on/run-1.txt",
+          "run": 1,
+          "keepalive_required": true,
+          "correct": true,
+          "allowed_for_benchmark": true,
+          "db_rows_after_run": 10606251
+        }
+      ],
+      "warmup_seconds": 5,
+      "duration_seconds": 60,
+      "server_pid": 86440,
+      "server_command": [
+        "/Users/priyanshshukla/Documents/deepseek-harness/default-workspace/http-server/build/bin/http_server"
+      ],
+      "server_config": {
+        "ENABLE_LOGGING": true,
+        "DIAGNOSTICS_INTERVAL_MS": 1000,
+        "MAX_CONNECTIONS": 1024,
+        "KEEPALIVE_TIMEOUT_MS": 120000,
+        "MAX_REQUESTS_PER_CONNECTION": 1000000,
+        "MAX_PIPELINED_REQUESTS": 8,
+        "MAX_CONNECTION_INPUT_BYTES": 131072,
+        "HEADER_TIMEOUT_MS": 30000,
+        "WRITE_TIMEOUT_MS": 30000,
+        "SHUTDOWN_GRACE_MS": 3000
+      },
+      "initial_probe": {
+        "status": 200,
+        "content_length": "1277",
+        "body_matches": true
+      },
+      "warmup": {
+        "command": [
+          "wrk",
+          "-t",
+          "1",
+          "-c",
+          "100",
+          "-d",
+          "5s",
+          "--latency",
+          "http://127.0.0.1:51389/"
+        ],
+        "exit_code": 0,
+        "wall_seconds": 5.137,
+        "client_cpu_seconds": 5.066,
+        "client_cpu_percent": 98.6,
+        "client_max_rss_kb": 3728,
+        "requests": 866078,
+        "test_seconds": 5.1,
+        "requests_per_second": 169782.46,
+        "latency_percentiles_ms": {
+          "50": 0.395,
+          "75": 0.464,
+          "90": 0.507,
+          "99": 0.638
+        },
+        "socket_errors": {
+          "connect": 0,
+          "read": 0,
+          "write": 0,
+          "timeout": 1
+        },
+        "socket_error_total": 1,
+        "non_2xx_responses": 0,
+        "successful_requests": 866078,
+        "successful_rps": 169782.46,
+        "raw_output_path": "data/benchmarks/v2-baseline/20261026T204736Z-86435/keepalive-logging-on/warmup.txt"
+      },
+      "db_rows_after_warmup": 866156,
+      "final_probe": {
+        "status": 200,
+        "content_length": "1277",
+        "body_matches": true
+      },
+      "db_rows_after_probe": 10610523,
+      "server_exit_code": 0,
+      "server_needed_sigkill": false,
+      "wall_seconds": 65.533,
+      "server_cpu_seconds": 104.25,
+      "server_cpu_percent": 159.1,
+      "server_max_rss_kb": 8032,
+      "logger_metrics": {
+        "offered": 10958997.0,
+        "accepted": 10610524.0,
+        "committed": 10610524.0,
+        "failed": 0.0,
+        "dropped": 348473.0,
+        "discarded": 0.0,
+        "queued": 0.0,
+        "peak_queue": 8192.0,
+        "in_flight": 0.0,
+        "batches": 42229.0,
+        "avg_flush_ms": 0.958727,
+        "max_flush_ms": 105.919
+      },
+      "server_log": "data/benchmarks/v2-baseline/20261026T204736Z-86435/keepalive-logging-on/server.log",
+      "database_path": "data/benchmarks/v2-baseline/20261026T204736Z-86435/keepalive-logging-on/access.db",
+      "db_rows_final": 10610524,
+      "drained_after_load": 1,
+      "logging_kept_up": false,
+      "sampled_body_checks": 2,
+      "summary": {
+        "runs": 1,
+        "rps_min": 167930.92,
+        "rps_median": 167930.92,
+        "rps_max": 167930.92,
+        "p50_ms_median": 0.39,
+        "p99_ms_median": 0.81,
+        "socket_errors_total": 0,
+        "non_2xx_total": 0,
+        "all_correct": true,
+        "all_allowed_for_benchmark": true,
+        "client_cpu_near_limit": true
+      }
+    }
+  ]
+}
