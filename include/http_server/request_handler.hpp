@@ -3,28 +3,37 @@
 
 #include <string>
 
+#include "http_server/asset_cache.hpp"
+#include "http_server/config.hpp"
+#include "http_server/connection_task.hpp"
+
 namespace http_server {
 
 class Logger;
 
 /*
- * Reads one HTTP request from client_fd, serves the routed static file
- * (or an error response), logs the access, and closes the connection.
- * Input:  client_fd  - Connected client socket.
- *         static_dir - Root directory for static files.
- *         client_ip  - Remote IP, used for access logging.
- *         logger     - Logger to record the access in.
+ * Handles one admitted connection. The task retains descriptor and admission
+ * ownership for the duration of the call; the caller must keep it alive until
+ * after the connection has been removed from any cancellation registry.
+ * Input:  task      - Socket, admission permit, and acceptance-time deadline.
+ *         cfg       - Static directory, logging, and timeout settings.
+ *         cache     - Immutable preloaded assets and fallback response.
+ *         client_ip - Remote IP, used for access logging.
+ *         logger    - Optional logger; null when logging is disabled.
  */
-void handleRequest(int client_fd, const std::string& static_dir,
-                   const std::string& client_ip, Logger& logger,
-                   bool log_enabled);
+void handleRequest(ConnectionTask& task, const Config& cfg,
+                   const AssetCache& cache, const std::string& client_ip,
+                   Logger* logger);
 
 /*
  * Builds a full HTTP/1.1 response string with headers and body.
+ * extra_headers is inserted verbatim before Connection; it must contain
+ * complete CRLF-terminated header lines or be empty.
  */
 std::string constructResponse(const std::string& status,
                               const std::string& contentType,
-                              const std::string& body);
+                              const std::string& body,
+                              const std::string& extra_headers = "");
 
 }  // namespace http_server
 

@@ -1,3 +1,5 @@
+-- Reference copy. Runtime schema initialization is embedded in
+-- src/logger.cpp so startup does not depend on the working directory.
 -- Schema for the http-server access log database.
 -- Run once at server startup; CREATE TABLE IF NOT EXISTS makes it idempotent.
 
@@ -8,7 +10,8 @@ CREATE TABLE IF NOT EXISTS access_logs (
     method      TEXT    NOT NULL,
     path        TEXT    NOT NULL,
     status_code INTEGER NOT NULL,
-    bytes_sent  INTEGER NOT NULL
+    bytes_sent  INTEGER NOT NULL,
+    transfer_outcome TEXT NOT NULL DEFAULT 'unknown'
 );
 
 CREATE INDEX IF NOT EXISTS idx_access_logs_timestamp

@@ -1,87 +1,282 @@
 #include "http_server/request_handler.hpp"
 
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
-#include <fstream>
+#include <chrono>
+#include <cstring>
 #include <iostream>
 
+#include "http_server/asset_cache.hpp"
+#include "http_server/deadline.hpp"
 #include "http_server/http_parser.hpp"
 #include "http_server/logger.hpp"
-#include "http_server/router.hpp"
-#include "http_server/utils.hpp"
 
 namespace http_server {
 
 namespace {
 
 constexpr int BUFFER_SIZE = 4096;
-constexpr size_t MAX_REQUEST_BYTES = 64 * 1024;  // 64KB header limit
 
-// Sends all bytes in `data`, retrying on partial writes and EINTR.
-// Returns true on success, false if the connection broke.
-bool sendAll(int fd, const char* data, size_t len) {
-    size_t total = 0;
-    while (total < len) {
-        ssize_t n = ::send(fd, data + total, len - total, 0);
-        if (n < 0) {
-            if (errno == EINTR) continue;
-            perror("send failed");
-            return false;
-        }
-        if (n == 0) return false;
-        total += static_cast<size_t>(n);
+struct ParseErrorResponse {
+    int status_code;
+    const char* status_line;
+    const char* body;
+};
+
+ParseErrorResponse parseErrorResponse(ParseError error) {
+    switch (error) {
+        case ParseError::UriTooLong:
+            return {414, "414 URI Too Long", "URI Too Long"};
+        case ParseError::HeadersTooLarge:
+            return {431, "431 Request Header Fields Too Large",
+                    "Request Header Fields Too Large"};
+        case ParseError::UnsupportedTransferEncoding:
+            return {501, "501 Not Implemented",
+                    "Transfer-Encoding is not implemented"};
+        case ParseError::BodyNotSupported:
+            return {400, "400 Bad Request", "Request body is not supported"};
+        case ParseError::BadRequest:
+        case ParseError::None:
+        default:
+            return {400, "400 Bad Request", "Bad Request"};
     }
-    return true;
 }
 
-bool sendString(int fd, const std::string& s) {
-    return sendAll(fd, s.data(), s.size());
+enum class WaitResult { Ready, Timeout, Error };
+enum class ReadResult { Ok, Timeout, Disconnected, Error };
+
+struct WriteResult {
+    std::size_t written = 0;
+    TransferFailure failure = TransferFailure::None;
+
+    bool complete() const { return failure == TransferFailure::None; }
+};
+
+WaitResult waitFor(int fd, short events, const Deadline& total_deadline,
+                   int per_wait_timeout_ms, short& revents) {
+    const int total_remaining = total_deadline.remainingMilliseconds();
+    if (total_remaining <= 0) return WaitResult::Timeout;
+
+    const int wait_ms = std::min(per_wait_timeout_ms, total_remaining);
+    const Deadline wait_deadline =
+        Deadline::after(std::chrono::milliseconds(wait_ms));
+
+    while (true) {
+        const int remaining =
+            std::min(wait_deadline.remainingMilliseconds(),
+                     total_deadline.remainingMilliseconds());
+        if (remaining <= 0) return WaitResult::Timeout;
+
+        pollfd pfd{fd, events, 0};
+        const int ready = ::poll(&pfd, 1, remaining);
+        if (ready > 0) {
+            revents = pfd.revents;
+            if (revents & POLLNVAL) return WaitResult::Error;
+            return WaitResult::Ready;
+        }
+        if (ready == 0) return WaitResult::Timeout;
+        if (errno == EINTR) continue;
+        return WaitResult::Error;
+    }
+}
+
+TransferFailure socketErrnoFailure() {
+    if (errno == EPIPE || errno == ECONNRESET || errno == ENOTCONN) {
+        return TransferFailure::Disconnected;
+    }
+    return TransferFailure::Error;
+}
+
+ReadResult readSome(int fd, char* buffer, std::size_t capacity,
+                    const Deadline& deadline, int recv_timeout_ms,
+                    std::size_t& received) {
+    while (true) {
+        short revents = 0;
+        const WaitResult wait =
+            waitFor(fd, POLLIN, deadline, recv_timeout_ms, revents);
+        if (wait == WaitResult::Timeout) return ReadResult::Timeout;
+        if (wait == WaitResult::Error) return ReadResult::Error;
+
+        const ssize_t n = ::recv(fd, buffer, capacity, MSG_DONTWAIT);
+        if (n > 0) {
+            received = static_cast<std::size_t>(n);
+            return ReadResult::Ok;
+        }
+        if (n == 0) return ReadResult::Disconnected;
+        if (errno == EINTR) continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
+        return socketErrnoFailure() == TransferFailure::Disconnected
+                   ? ReadResult::Disconnected
+                   : ReadResult::Error;
+    }
+}
+
+WriteResult writeAll(int fd, const char* data, std::size_t length,
+                     const Deadline& deadline, int send_timeout_ms) {
+    WriteResult result;
+    while (result.written < length) {
+        short revents = 0;
+        const WaitResult wait =
+            waitFor(fd, POLLOUT, deadline, send_timeout_ms, revents);
+        if (wait == WaitResult::Timeout) {
+            result.failure = TransferFailure::Timeout;
+            return result;
+        }
+        if (wait == WaitResult::Error) {
+            result.failure = TransferFailure::Error;
+            return result;
+        }
+
+        const ssize_t n = ::send(fd, data + result.written,
+                                 length - result.written, MSG_DONTWAIT);
+        if (n > 0) {
+            result.written += static_cast<std::size_t>(n);
+            continue;
+        }
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
+        result.failure =
+            n == 0 ? TransferFailure::Disconnected : socketErrnoFailure();
+        return result;
+    }
+    return result;
+}
+
+WriteResult sendResponse(int fd, const std::string& response,
+                         const Config& cfg) {
+    const Deadline deadline =
+        Deadline::after(std::chrono::milliseconds(cfg.write_timeout_ms));
+    return writeAll(fd, response.data(), response.size(), deadline,
+                    cfg.send_timeout_ms);
+}
+
+WriteResult send408BestEffort(int fd) {
+    static constexpr char response[] =
+        "HTTP/1.1 408 Request Timeout\r\n"
+        "Content-Type: text/plain\r\n"
+        "Content-Length: 15\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+        "Request timeout";
+    // Single nonblocking write. No retry: a 408 must not become another
+    // unbounded write.
+    const ssize_t n =
+        ::send(fd, response, sizeof(response) - 1, MSG_DONTWAIT);
+    WriteResult result;
+    if (n > 0) {
+        result.written = static_cast<std::size_t>(n);
+        if (result.written < sizeof(response) - 1) {
+            result.failure = TransferFailure::Error;
+        }
+        return result;
+    }
+    result.failure =
+            n == 0 ? TransferFailure::Disconnected : socketErrnoFailure();
+    return result;
+}
+
+bool cancellationRequested(const ConnectionTask& task) {
+    return task.cancelled &&
+           task.cancelled->load(std::memory_order_relaxed);
 }
 
 }  // anonymous namespace
 
 std::string constructResponse(const std::string& status,
                               const std::string& contentType,
-                              const std::string& body) {
+                              const std::string& body,
+                              const std::string& extra_headers) {
     return "HTTP/1.1 " + status + "\r\n" + "Content-Type: " + contentType +
            "\r\n" + "Content-Length: " + std::to_string(body.size()) + "\r\n" +
-           "Connection: close\r\n\r\n" + body;
+           extra_headers + "Connection: close\r\n\r\n" + body;
 }
 
-void handleRequest(int client_fd, const std::string& static_dir,
-                   const std::string& client_ip, Logger& logger,
-                   bool log_enabled) {
+void handleRequest(ConnectionTask& task, const Config& cfg,
+                   const AssetCache& cache, const std::string& client_ip,
+                   Logger* logger) {
+    const int client_fd = task.socket.get();
     char buffer[BUFFER_SIZE];
     std::string accumulated_data;
     accumulated_data.reserve(BUFFER_SIZE);
 
     int status_code = 0;
-    size_t bytes_sent = 0;
+    std::size_t bytes_sent = 0;
+    TransferOutcome outcome = TransferOutcome::Unknown;
     std::string log_method = "-";
     std::string log_path = "-";
+    const ParserLimits parser_limits;
+    const Deadline header_deadline = task.header_deadline;
 
-    // 1) Read until we see the end-of-headers marker, or hit the size cap.
-    while (accumulated_data.find("\r\n\r\n") == std::string::npos) {
-        if (accumulated_data.size() >= MAX_REQUEST_BYTES) {
-            std::string resp =
-                constructResponse("413 Payload Too Large", "text/plain",
-                                  "Request headers too large");
-            sendString(client_fd, resp);
-            status_code = 413;
-            bytes_sent = resp.size();
+    const auto cancelled_now = [&task]() {
+        return cancellationRequested(task);
+    };
+
+    // Queue wait is part of the request budget. Do not grant an expired task a
+    // fresh header timeout when a worker finally picks it up.
+    if (header_deadline.expired()) {
+        const WriteResult write = send408BestEffort(client_fd);
+        bytes_sent = write.written;
+        status_code = 408;
+        outcome = cancelled_now() ? TransferOutcome::ShutdownCancelled
+                                  : TransferOutcome::Timeout;
+        goto done;
+    }
+
+    // 1) Read until the header boundary is found, but validate the boundary
+    // position after every read so a single oversized read cannot slip past
+    // the limit.
+    while (true) {
+        const std::size_t headers_end = accumulated_data.find("\r\n\r\n");
+        if (headers_end != std::string::npos) {
+            if (headers_end + 4 > parser_limits.max_header_bytes) {
+                std::string resp = constructResponse(
+                    "431 Request Header Fields Too Large", "text/plain",
+                    "Request Header Fields Too Large");
+                const WriteResult write = sendResponse(client_fd, resp, cfg);
+                bytes_sent = write.written;
+                status_code = 431;
+                outcome = classifyTransferOutcome(write.written, write.failure, cancelled_now());
+                goto done;
+            }
+            break;
+        }
+        if (accumulated_data.size() >= parser_limits.max_header_bytes) {
+            std::string resp = constructResponse(
+                "431 Request Header Fields Too Large", "text/plain",
+                "Request Header Fields Too Large");
+            const WriteResult write = sendResponse(client_fd, resp, cfg);
+            bytes_sent = write.written;
+            status_code = 431;
+            outcome = classifyTransferOutcome(write.written, write.failure, cancelled_now());
             goto done;
         }
 
-        ssize_t bytes_received = ::recv(client_fd, buffer, BUFFER_SIZE, 0);
-        if (bytes_received < 0) {
-            if (errno == EINTR) continue;
-            perror("recv failed");
+        std::size_t bytes_received = 0;
+        const ReadResult read_result =
+            readSome(client_fd, buffer, BUFFER_SIZE, header_deadline,
+                     cfg.recv_timeout_ms, bytes_received);
+        if (read_result == ReadResult::Timeout) {
+            // Best-effort, single nonblocking write. The descriptor will be
+            // closed by RAII after logging.
+            const WriteResult write = send408BestEffort(client_fd);
+            bytes_sent = write.written;
+            status_code = 408;
+            outcome = cancelled_now() ? TransferOutcome::ShutdownCancelled
+                                      : TransferOutcome::Timeout;
             goto done;
         }
-        if (bytes_received == 0) {
-            // Client closed without finishing the request.
+        if (read_result == ReadResult::Disconnected) {
+            outcome = cancelled_now() ? TransferOutcome::ShutdownCancelled
+                                      : TransferOutcome::Disconnected;
+            goto done;
+        }
+        if (read_result == ReadResult::Error) {
+            outcome = cancelled_now() ? TransferOutcome::ShutdownCancelled
+                                      : TransferOutcome::Failed;
             goto done;
         }
         accumulated_data.append(buffer, bytes_received);
@@ -89,13 +284,15 @@ void handleRequest(int client_fd, const std::string& static_dir,
 
     // 2) Parse the request.
     {
-        ParsedRequest req = parseRequest(accumulated_data);
+        ParsedRequest req = parseRequest(accumulated_data, parser_limits);
         if (!req.valid) {
-            std::string resp = constructResponse("400 Bad Request",
-                                                 "text/plain", "Bad Request");
-            sendString(client_fd, resp);
-            status_code = 400;
-            bytes_sent = resp.size();
+            const ParseErrorResponse error = parseErrorResponse(req.error);
+            std::string resp = constructResponse(error.status_line, "text/plain",
+                                                 error.body);
+            const WriteResult write = sendResponse(client_fd, resp, cfg);
+            bytes_sent = write.written;
+            status_code = error.status_code;
+            outcome = classifyTransferOutcome(write.written, write.failure, cancelled_now());
             goto done;
         }
 
@@ -104,78 +301,61 @@ void handleRequest(int client_fd, const std::string& static_dir,
 
         if (req.method != "GET") {
             std::string resp = constructResponse(
-                "405 Method Not Allowed", "text/plain", "Method Not Allowed");
-            sendString(client_fd, resp);
+                "405 Method Not Allowed", "text/plain", "Method Not Allowed",
+                "Allow: GET\r\n");
+            const WriteResult write = sendResponse(client_fd, resp, cfg);
+            bytes_sent = write.written;
             status_code = 405;
-            bytes_sent = resp.size();
+            outcome = classifyTransferOutcome(write.written, write.failure, cancelled_now());
             goto done;
         }
 
-        // 3) Resolve route and try to open the file.
-        std::string file_path = routeToFile(req.path, static_dir);
-        std::string content_type = getContentType(file_path);
+        // 3) Look up the immutable preloaded response.
+        const CachedAsset& asset = cache.lookup(req.path);
+        const std::string headers =
+            asset.header_prefix + "Connection: close\r\n\r\n";
 
-        std::ifstream file(file_path, std::ios::binary);
-        if (!file.is_open()) {
-            std::string resp = constructResponse(
-                "404 Not Found", "text/html",
-                "<html><body><h1>404 Not Found</h1></body></html>");
-            sendString(client_fd, resp);
-            status_code = 404;
-            bytes_sent = resp.size();
+        const Deadline write_deadline =
+            Deadline::after(std::chrono::milliseconds(cfg.write_timeout_ms));
+        const WriteResult header_write =
+            writeAll(client_fd, headers.data(), headers.size(), write_deadline,
+                     cfg.send_timeout_ms);
+        bytes_sent += header_write.written;
+        if (!header_write.complete()) {
+            status_code = asset.status_code;
+            outcome = classifyTransferOutcome(header_write.written, header_write.failure, cancelled_now());
             goto done;
         }
 
-        // 4) Determine size and send headers.
-        file.seekg(0, std::ios::end);
-        std::streampos file_size = file.tellg();
-        file.seekg(0, std::ios::beg);
-        if (file_size < 0) {
-            std::string resp =
-                constructResponse("500 Internal Server Error", "text/plain",
-                                  "Internal Server Error");
-            sendString(client_fd, resp);
-            status_code = 500;
-            bytes_sent = resp.size();
-            goto done;
+        if (!asset.body->empty()) {
+            const WriteResult body_write =
+                writeAll(client_fd, asset.body->data(), asset.body->size(),
+                         write_deadline, cfg.send_timeout_ms);
+            bytes_sent += body_write.written;
+            if (!body_write.complete()) {
+                status_code = asset.status_code;
+                // Headers may already be on the wire. Classify the whole
+                // response, not just the body fragment, so a generic
+                // zero-body-byte send failure is Partial rather than Failed.
+                outcome = classifyTransferOutcome(
+                    bytes_sent, body_write.failure, cancelled_now());
+                goto done;
+            }
         }
-
-        std::string headers =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: " +
-            content_type +
-            "\r\n"
-            "Content-Length: " +
-            std::to_string(file_size) +
-            "\r\n"
-            "Connection: close\r\n\r\n";
-
-        if (!sendString(client_fd, headers)) {
-            status_code = 200;
-            bytes_sent = 0;
-            goto done;
-        }
-        bytes_sent += headers.size();
-
-        // 5) Stream the body. Loop on gcount() rather than eof().
-        char file_buffer[BUFFER_SIZE];
-        while (file.read(file_buffer, sizeof(file_buffer)) ||
-               file.gcount() > 0) {
-            std::streamsize got = file.gcount();
-            if (got <= 0) break;
-            if (!sendAll(client_fd, file_buffer, static_cast<size_t>(got)))
-                break;
-            bytes_sent += static_cast<size_t>(got);
-        }
-        status_code = 200;
+        status_code = asset.status_code;
+        outcome = TransferOutcome::Complete;
     }
 
 done:
-    if (log_enabled) {
-        logger.logAccess(log_method, log_path, status_code, bytes_sent,
-                         client_ip);
+    if (outcome == TransferOutcome::Unknown) {
+        outcome = cancelled_now() ? TransferOutcome::ShutdownCancelled
+                                  : TransferOutcome::Failed;
     }
-    ::close(client_fd);
+    if (cfg.enable_logging && logger) {
+        logger->logAccess(log_method, log_path, status_code, bytes_sent,
+                          outcome, client_ip);
+    }
+    // client_socket closes the descriptor when this function returns.
 }
 
 }  // namespace http_server
