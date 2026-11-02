@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build-and-test:
+    # Linux and macOS: their CMake versions name the SQLite target
+    # differently, so both are built on every push.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake libsqlite3-dev pkg-config
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  docker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t http-server:ci .
+
+      - name: Run it and check it serves
+        run: |
+          docker run -d --name http-server -p 8080:8080 http-server:ci
+          for i in $(seq 30); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' http-server)
+            [ "$status" = healthy ] && break
+            sleep 1
+          done
+          echo "health: $status"
+          test "$status" = healthy
+          curl -fsS -o /dev/null -w "GET / -> %{http_code}\n" http://localhost:8080/
+          curl -sS -o /dev/null -w "GET /nope -> %{http_code}\n" http://localhost:8080/nope
+
+      - name: Graceful stop
+        run: |
+          docker stop -t 10 http-server
+          docker logs http-server | tail -5
+          test "$(docker inspect -f '{{.State.ExitCode}}' http-server)" = 0
