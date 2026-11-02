@@ -1,0 +1,11 @@
+# Only CMakeLists.txt, include/, src/ and static/ go into the image.
+.git
+build
+data
+docs
+legacy
+scripts
+tests
+*.md
+Dockerfile
+.dockerignore
