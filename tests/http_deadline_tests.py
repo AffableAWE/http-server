@@ -34,7 +34,9 @@ def wait_ready(port: int, timeout: float) -> None:
     while time.monotonic() < deadline:
         try:
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=0.25)
-            connection.request("GET", "/", headers={"Host": "localhost"})
+            # Connection: close, so the server closes this probe and frees
+            # the single connection slot before the first test connects.
+            connection.request("GET", "/", headers={"Host": "localhost", "Connection": "close"})
             response = connection.getresponse()
             response.read()
             connection.close()
@@ -47,17 +49,20 @@ def wait_ready(port: int, timeout: float) -> None:
 
 
 def read_status(port: int, path: str = "/about", timeout: float = 3.0) -> str:
+    """Status line of one request, on a connection the server closes.
+
+    These tests run with MAX_CONNECTIONS=1. If the client closed the probe,
+    the server would free the slot only when its event loop next noticed,
+    and the following test could connect first and get 503. With
+    Connection: close the server closes it and frees the slot in the same
+    step, so reading until EOF means the slot is free.
+    """
     with connect(port, timeout) as sock:
         sock.sendall(
-            f"GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n".encode()
+            f"GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".encode()
         )
-        response = bytearray()
-        while b"\r\n\r\n" not in response:
-            chunk = sock.recv(4096)
-            if not chunk:
-                break
-            response.extend(chunk)
-    return bytes(response).split(b"\r\n", 1)[0].decode("latin1")
+        response = read_until_closed(sock)
+    return response.split(b"\r\n", 1)[0].decode("latin1")
 
 
 def read_until_closed(sock: socket.socket, limit: int = 2 * 1024 * 1024) -> bytes:
