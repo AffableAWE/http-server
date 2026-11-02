@@ -1,5 +1,7 @@
 # http-server
 
+![CI](https://github.com/AffableAWE/http-server/actions/workflows/ci.yml/badge.svg)
+
 A blazingly fast, event-driven **HTTP/1.1 server** built entirely from scratch in modern **C++17**. No bulky frameworks—just raw performance, clean architecture, and embedded SQLite logging.
 
 | ~180k req/sec, p99 0.59 ms (keep-alive, one thread) | HTTP/1.1 keep-alive + ordered pipelining | Dual-Stack IPv4 / IPv6 |
@@ -112,7 +114,7 @@ mkdir -p data
 ./build/bin/http_server
 ```
 
-Run the test suite (14 tests, C++ unit and Python integration):
+Run the test suite (15 tests on Linux, 14 on macOS; C++ unit and Python integration):
 
 ```bash
 cd build && ctest --output-on-failure
@@ -129,6 +131,24 @@ Or visit:
 ```text
 http://localhost:8080/
 ```
+
+### 4. Or run it in Docker
+
+```bash
+docker build -t http-server .
+docker run --rm -p 8080:8080 http-server
+```
+
+The image is built in two stages: a build stage with the compiler, and a
+small runtime stage with only the binary, the static files and libsqlite3.
+It runs as a non-root user, has a health check (plain bash, no curl), and
+the server is PID 1 so `docker stop` triggers its graceful shutdown. Every
+environment variable below works with `docker run -e`, for example
+`-e ENABLE_LOGGING=false`.
+
+If IPv6 is present but disabled, as in many containers and IPv4-only
+clusters, the server logs a warning and serves on IPv4 only, instead of
+exiting.
 
 ---
 
