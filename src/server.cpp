@@ -166,7 +166,18 @@ ListenerResult setupListener(int family, int port, UniqueFd& out,
         addr.sin6_addr = in6addr_any;
         if (::bind(candidate.get(), reinterpret_cast<sockaddr*>(&addr),
                    sizeof(addr)) < 0) {
-            std::perror("IPv6 bind");
+            const int error = errno;
+            // With IPv6 present but disabled (net.ipv6.conf.all.disable_ipv6=1,
+            // common in containers and IPv4-only clusters), socket() succeeds
+            // and only bind() fails. Treat that like a missing IPv6 stack.
+            if (error == EADDRNOTAVAIL || familyUnavailable(error)) {
+                std::cerr << "[WARNING] " << label << " unavailable ("
+                          << std::strerror(error)
+                          << "); continuing with the other family." << std::endl;
+                return ListenerResult::Unavailable;
+            }
+            std::cerr << "[ERROR] " << label << " bind: "
+                      << std::strerror(error) << std::endl;
             return ListenerResult::Error;
         }
     }

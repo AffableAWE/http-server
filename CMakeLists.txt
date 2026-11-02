@@ -208,6 +208,24 @@ if(BUILD_TESTING)
             TIMEOUT 60
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         )
+
+        # IPv6 present but disabled (common in containers): the server must
+        # carry on with IPv4. Simulated with an LD_PRELOAD shim, so Linux only.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_library(ipv6_disabled_shim SHARED tests/ipv6_disabled_shim.cpp)
+            target_link_libraries(ipv6_disabled_shim PRIVATE ${CMAKE_DL_LIBS})
+            add_test(
+                NAME http_ipv6_fallback_tests
+                COMMAND "${Python3_EXECUTABLE}"
+                        "${CMAKE_SOURCE_DIR}/tests/http_ipv6_fallback_tests.py"
+                        --binary "$<TARGET_FILE:http_server>"
+                        --shim "$<TARGET_FILE:ipv6_disabled_shim>"
+            )
+            set_tests_properties(http_ipv6_fallback_tests PROPERTIES
+                TIMEOUT 30
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            )
+        endif()
     else()
         message(WARNING "Python3 not found; http_protocol_tests will not run")
     endif()
