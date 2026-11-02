@@ -29,7 +29,15 @@ target_include_directories(http_server PRIVATE
 
 # -------- SQLite --------
 find_package(SQLite3 REQUIRED)
-target_link_libraries(http_server PRIVATE SQLite3::SQLite3)
+# CMake's FindSQLite3 names its target SQLite::SQLite3; CMake 4.x adds the
+# SQLite3::SQLite3 spelling too. Older CMake (3.28 on Ubuntu 24.04, and so in
+# most Docker images) has only the first, so pick whichever exists.
+if(TARGET SQLite3::SQLite3)
+    set(HTTP_SERVER_SQLITE_TARGET SQLite3::SQLite3)
+else()
+    set(HTTP_SERVER_SQLITE_TARGET SQLite::SQLite3)
+endif()
+target_link_libraries(http_server PRIVATE ${HTTP_SERVER_SQLITE_TARGET})
 # -------- Threads --------
 find_package(Threads REQUIRED)
 target_link_libraries(http_server PRIVATE Threads::Threads)
@@ -73,7 +81,7 @@ if(BUILD_TESTING)
         HTTP_SERVER_TESTING
     )
     target_link_libraries(http_logger_unit_tests PRIVATE
-        SQLite3::SQLite3
+        ${HTTP_SERVER_SQLITE_TARGET}
         Threads::Threads
     )
     add_test(NAME http_logger_unit_tests COMMAND http_logger_unit_tests)
